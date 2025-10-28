@@ -188,7 +188,18 @@ async function main() {
 }
 
 // 실행
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Windows와 Unix 환경 모두 지원하도록 경로 비교 개선
+const isMainModule = () => {
+  try {
+    const scriptPath = fileURLToPath(import.meta.url);
+    const argvPath = path.resolve(process.argv[1]);
+    return scriptPath === argvPath;
+  } catch {
+    return false;
+  }
+};
+
+if (isMainModule()) {
   await main();
 }
 
