@@ -1,0 +1,23 @@
+# Node modules
+node_modules/
+
+# Downloaded binaries
+target/*.bin
+target/*.exe
+target/*.backup
+
+# Keep target directory structure
+!target/.gitkeep
+
+# Lock files (optional - keep only one)
+package-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
