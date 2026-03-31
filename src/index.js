@@ -1,7 +1,7 @@
-import axios from "axios";
 import fs from "node:fs";
 import path, { dirname } from "node:path";
 import { pipeline } from "node:stream";
+import { Readable } from "node:stream";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -47,23 +47,31 @@ function getCurrentPlatform() {
 async function getLatestVersion() {
   try {
     console.log("GitHub에서 최신 버전 확인 중...");
-    const response = await axios.get(GITHUB_API, {
+    const response = await fetch(GITHUB_API, {
       headers: {
         Accept: "application/vnd.github+json",
         "User-Agent": "google-java-format-updater",
       },
     });
 
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.error("GitHub API rate limit에 도달했을 수 있습니다.");
+      }
+      throw new Error(
+        `GitHub API 요청 실패: ${response.status} ${response.statusText}`,
+      );
+    }
+
+    const data = await response.json();
+
     // tag_name에서 버전 추출 (예: "v1.23.0" -> "1.23.0")
-    const version = response.data.tag_name.replace(/^v/, "");
-    console.log(`GitHub 최신 릴리즈: ${response.data.tag_name}`);
+    const version = data.tag_name.replace(/^v/, "");
+    console.log(`GitHub 최신 릴리즈: ${data.tag_name}`);
 
     return version;
   } catch (error) {
     console.error("최신 버전 조회 실패:", error.message);
-    if (error.response?.status === 403) {
-      console.error("GitHub API rate limit에 도달했을 수 있습니다.");
-    }
     throw error;
   }
 }
@@ -73,7 +81,7 @@ async function getCurrentVersion(platform) {
   const binaryName = PLATFORM_BINARIES[platform];
   const binaryPath = path.join(
     DOWNLOAD_DIR,
-    `${binaryName}${platform.includes("win32") ? "" : ".bin"}`
+    `${binaryName}${platform.includes("win32") ? "" : ".bin"}`,
   );
 
   if (!fs.existsSync(binaryPath)) {
@@ -125,16 +133,18 @@ async function downloadGoogleJavaFormat(version, platform) {
   const downloadUrl = `https://github.com/google/google-java-format/releases/download/v${version}/${binaryName}`;
   const outputPath = path.join(
     DOWNLOAD_DIR,
-    `${binaryName}${platform.includes("win32") ? "" : ".bin"}`
+    `${binaryName}${platform.includes("win32") ? "" : ".bin"}`,
   );
 
   try {
     console.log(`다운로드 중: ${downloadUrl}`);
-    const response = await axios({
-      method: "GET",
-      url: downloadUrl,
-      responseType: "stream",
-    });
+    const response = await fetch(downloadUrl);
+
+    if (!response.ok) {
+      throw new Error(
+        `다운로드 요청 실패: ${response.status} ${response.statusText}`,
+      );
+    }
 
     // 기존 파일 백업
     if (fs.existsSync(outputPath)) {
@@ -144,7 +154,8 @@ async function downloadGoogleJavaFormat(version, platform) {
     }
 
     // 새 파일 다운로드
-    await streamPipeline(response.data, fs.createWriteStream(outputPath));
+    const nodeStream = Readable.fromWeb(response.body);
+    await streamPipeline(nodeStream, fs.createWriteStream(outputPath));
 
     // 실행 권한 부여 (Linux/Mac)
     if (platform !== "win32-x64") {
